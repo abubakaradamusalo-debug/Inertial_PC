@@ -1,0 +1,206 @@
+function [Tcpu, Itr, NormF, xn] = IDFPM(fun, method, Switch, model, x0, para)
+    format long;
+    tic;
+    epsilon = 1e-6;
+    k_max = para.Itr_max;
+    gamma = para.gamma;
+    sigma = para.sigma;
+    tau = para.tau;
+    rho = para.rho;
+    err = 1;
+    xnm2 = x0;
+    xnm1=xnm2;
+    xn = xnm1;
+    uu=ones(size(x0),1);
+    lamn = 0.1;
+    k = 1;
+
+    while (k <= k_max && err > epsilon)
+        switch method
+            case 'SunAlg1'
+                   
+                lamn=0.5;
+                gama=0.8;
+                tau=1.5;
+                mu=0.5;
+                
+                alphan=1/(k+2)^0.0001;
+                thetan=(1/(k+1)^2)-1/(k+1)^3;
+                deltan=-100/(k+2)^2;
+                gaman=1/(k+1);
+                rhon=1/(k+2)^2;
+                
+                zn=xn+thetan*(xn-xnm1)+deltan*(xnm1-xnm2); 
+                
+                Fzn = feval(fun, zn);
+                pyn = zn-tau*lamn*Fzn;
+                yn = soft_threshold(pyn, lamn);
+                Fyn = feval(fun, yn);
+                
+                dn=zn-yn-tau*lamn*(Fzn-Fyn);
+                etan=(1-tau*mu)*norm(zn-yn)/norm(dn);
+                 
+                nnp=zn-tau*lamn*Fzn-yn;
+                phs=zn-gama*lamn*etan*Fyn;
+                
+                xnp1= alphan*uu+(1-alphan)*proj_halfspace(phs,nnp,yn);   
+
+                
+                con = norm(Fzn - Fyn);
+                if norm(con) > 0
+                    lamnp1 = min(((gaman+mu)*norm(zn-yn))/con,lamn+rhon);
+                else
+                    lamnp1 = lamn + rhon;
+                end
+            case 'SunAlg2'
+                                
+                lamn=0.5;
+                gama=0.8;
+                tau=1.5;
+                mu=0.5;
+                
+                alphan=1/(k+2)^0.0001;
+                betan=0.3;
+                thetan=(1/(k+1)^2)-1/(k+1)^3;
+                deltan=-100/(k+2)^2;
+                gaman=1/(k+1);
+                rhon=1/(k+2)^2;
+                
+                zn=xn+thetan*(xn-xnm1)+deltan*(xnm1-xnm2); 
+                
+                Fzn = feval(fun, zn);
+                pyn = zn-tau*lamn*Fzn;
+                yn = soft_threshold(pyn, lamn);
+                Fyn = feval(fun, yn);
+                
+                dn=zn-yn-tau*lamn*(Fzn-Fyn);
+                etan=(1-tau*mu)*norm(zn-yn)/norm(dn);
+                 
+                nnp=zn-tau*lamn*Fzn-yn;
+                phs=zn-gama*lamn*etan*Fyn;
+                
+                xnp1= (1-alphan-betan)*xn+betan*proj_halfspace(phs,nnp,yn);  
+                
+                con = norm(Fzn - Fyn);
+                if norm(con) > 0
+                    lamnp1 = min(((gaman+mu)*norm(zn-yn))/con,lamn+rhon);
+                else
+                    lamnp1 = lamn + rhon;
+                end 
+                
+            case 'WSPAAAlg1'
+                
+                mu = 1e-2;
+                beta=0.95;  
+                betan=10000/(k+3)^1.2;
+        
+                sn=1/(5*k+7)^2;  
+                
+                if norm(xn-xnm1)==0
+                    alphan=beta;                    
+                else                    
+                    alphan=min(beta,betan/norm(xn-xnm1));       
+                end              
+                
+                un=xn+alphan*(xn-xnm1);                
+                Fun = feval(fun, un);
+                pyn = un-lamn*Fun;
+                yn = soft_threshold(pyn, lamn);
+                Fyn = feval(fun, yn); 
+         
+                nnp=un-lamn*Fun-yn;
+                phs=un-lamn*Fyn;
+                xnp1=proj_halfspace(phs,nnp,yn);           
+        
+                con=dot(xnp1-yn,Fun-Fyn);
+       
+                if con>0
+            
+                    lamnp1=min((mu*(norm(xnp1-yn)^2+norm(un-yn)^2))/(2*con),lamn+sn);
+        
+                else
+                    
+                    lamnp1= lamn+sn;
+        
+                end 
+                 
+            case 'WSPAAAlg2'
+                
+                
+                mu = 1e-2;
+                beta=0.95;  
+                betan=10000/(k+3)^1.2;
+        
+                sn=1/(5*k+7)^2;  
+                
+                if norm(xn-xnm1)==0
+                    alphan=beta;                    
+                else                    
+                    alphan=min(beta,betan/norm(xn-xnm1));       
+                end              
+                
+                un=xn+alphan*(xnm1-xn);                
+                Fun = feval(fun, un);
+                pyn = un-lamn*Fun;
+                yn = soft_threshold(pyn, lamn);
+                Fyn = feval(fun, yn); 
+         
+                nnp=un-lamn*Fun-yn;
+                phs=un-lamn*Fyn;
+                xnp1=proj_halfspace(phs,nnp,yn);           
+        
+                con=dot(xnp1-yn,Fun-Fyn);
+       
+                if con>0
+            
+                    lamnp1=min((mu*(norm(xnp1-yn)^2+norm(un-yn)^2))/(2*con),lamn+sn);
+        
+                else
+                    
+                    lamnp1= lamn+sn;
+        
+                end 
+                   case 'WSPAAAlg3'
+                
+                
+                mu = 1e-2; 
+        
+                sn=1/(5*k+7)^2;  
+         
+                alphan=0.9+1/(k+1);             
+                
+                un=xn+alphan*(xnm1-xn);                
+                Fun = feval(fun, un);
+                pyn = un-lamn*Fun;
+                yn = soft_threshold(pyn, lamn);
+                Fyn = feval(fun, yn); 
+         
+                nnp=un-lamn*Fun-yn;
+                phs=un-lamn*Fyn;
+                xnp1=proj_halfspace(phs,nnp,yn);           
+        
+                con=dot(xnp1-yn,Fun-Fyn);
+       
+                if con>0
+            
+                    lamnp1=min((mu*(norm(xnp1-yn)^2+norm(un-yn)^2))/(2*con),lamn+sn);
+        
+                else
+                    
+                    lamnp1= lamn+sn;
+        
+                end 
+                
+            otherwise
+                disp('Input error! Please check the input method');
+        end
+        xnm1 = xn;
+        xn = xnp1;
+        lamn = lamnp1;
+        err = norm(xn - xnm1);
+        k = k + 1;
+    end
+    Itr = k;
+    Tcpu = toc;
+    NormF = err;
+end
